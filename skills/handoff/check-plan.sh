@@ -3,9 +3,10 @@
 #   bash ~/.claude/skills/handoff/check-plan.sh            (from the repo's top-level directory)
 # Fails (exit 1) when:
 #   - a "## Files to touch" entry does not exist as a tracked file, unless it ends in "(new)";
-#   - an entry marked "(new)" already exists, or its parent folder does not exist;
-#   - a repo path named in backticks anywhere in the plan is neither a tracked file nor a
-#     "(new)" entry in Files to touch (a made-up or mistyped path).
+#   - an entry marked "(new)" already exists, or its parent folder does not exist.
+# An entry with a placeholder such as <slug> is skipped (the executor picks the name).
+# Warns, without failing, about repo paths named in backticks elsewhere in the plan that are not
+# tracked files: steps often shorten or relativise a path, so that scan is only a hint.
 # Files to touch entries are list lines whose first backticked text is the path:
 #   - `tools/arranger/lib.mjs`
 #   - `tools/arranger/new-song.mjs` (new)
@@ -24,6 +25,7 @@ while IFS= read -r line; do
   [ -n "$path" ] || { echo "FAIL  no backticked path in: $line"; fail=1; continue; }
   LISTED[$path]=1
   [ "$path" = ".handoff/report.md" ] && continue
+  case "$path" in *'<'*'>'*) echo "skip  $path (placeholder)"; continue ;; esac
   if printf '%s' "$line" | grep -qE '\(new[),]'; then
     NEW[$path]=1
     if [ -e "$path" ]; then echo "FAIL  $path is marked (new) but already exists"; fail=1
@@ -42,7 +44,7 @@ while IFS= read -r p; do
   case "$p" in /*|~*|http*|*'<'*|*'*'*|*' '*|.handoff/*) continue ;; esac
   [ -n "${NEW[$p]:-}" ] && continue
   if git ls-files --error-unmatch "$p" >/dev/null 2>&1 || [ -d "$p" ]; then continue; fi
-  echo "FAIL  the plan names \`$p\`, which is not in the repo and not a (new) entry"; fail=1
+  echo "warn  the plan names \`$p\`, which is not a tracked file (check the path)"
 done < <(grep -oE '`[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+`' "$PLAN" | tr -d '`' | sort -u)
 
 if [ "$fail" -ne 0 ]; then echo "check-plan: FAILED - fix .handoff/plan.md before running"; exit 1; fi
