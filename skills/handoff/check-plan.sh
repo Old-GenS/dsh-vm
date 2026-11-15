@@ -3,7 +3,7 @@
 #   bash ~/.claude/skills/handoff/check-plan.sh            (from the repo's top-level directory)
 # Fails (exit 1) when:
 #   - a "## Files to touch" entry does not exist as a tracked file, unless it ends in "(new)";
-#   - an entry marked "(new)" already exists, or its parent folder does not exist.
+#   - an entry marked "(new)" already exists.
 # An entry with a placeholder such as <slug> is skipped (the executor picks the name).
 # Warns, without failing, about repo paths named in backticks elsewhere in the plan that are not
 # tracked files: steps often shorten or relativise a path, so that scan is only a hint.
@@ -29,7 +29,6 @@ while IFS= read -r line; do
   if printf '%s' "$line" | grep -qE '\(new[),]'; then
     NEW[$path]=1
     if [ -e "$path" ]; then echo "FAIL  $path is marked (new) but already exists"; fail=1
-    elif [ ! -d "$(dirname "$path")" ]; then echo "FAIL  $path is new but its folder $(dirname "$path")/ does not exist"; fail=1
     else echo "ok    $path (new)"; fi
   elif git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
     echo "ok    $path"
