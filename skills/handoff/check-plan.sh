@@ -24,7 +24,7 @@ while IFS= read -r line; do
   [ -n "$path" ] || { echo "FAIL  no backticked path in: $line"; fail=1; continue; }
   LISTED[$path]=1
   [ "$path" = ".handoff/report.md" ] && continue
-  if printf '%s' "$line" | grep -q '(new)'; then
+  if printf '%s' "$line" | grep -qE '\(new[),]'; then
     NEW[$path]=1
     if [ -e "$path" ]; then echo "FAIL  $path is marked (new) but already exists"; fail=1
     elif [ ! -d "$(dirname "$path")" ]; then echo "FAIL  $path is new but its folder $(dirname "$path")/ does not exist"; fail=1
