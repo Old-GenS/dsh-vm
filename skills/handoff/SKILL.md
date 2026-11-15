@@ -88,8 +88,6 @@ Write `.handoff/plan.md` with exactly these sections:
   runs). For a quick one-off check in a project without one, point it at the system Chromium:
   `executablePath: '/usr/lib64/chromium-browser/chromium-browser'`.
 
-Then check the files: run `ls` on every file in **Files to touch**. A file marked "(new)" must not exist yet, and every other file must exist. Fix the plan before going on.
-
 Then check the **Acceptance** commands, before the executor spends anything on them. The
 code does not exist yet, so this tests the command, not the result:
 
