@@ -76,10 +76,11 @@ Write `.handoff/plan.md` with exactly these sections:
     full **Acceptance** after all workstreams finish.
   - Otherwise write `None — do it sequentially.` Small tasks, tightly coupled changes,
     or anything touching the same files stay sequential; delegation overhead is not free.
-- **Constraints** always includes: do not commit, push, or switch branches; do not touch
-  files outside **Files to touch** except `.handoff/report.md`. Installing dependencies
-  (`npm ci`, `dnf install`) and temporary files outside the repo are fine: the VM is thrown
-  away.
+- **Constraints** always includes: do not commit, push, or switch branches. A step may touch a
+  file outside **Files to touch** when it has to — the clone lives in a throwaway VM and is
+  discarded — but every such file must appear in the report under "outside the plan", one line
+  each saying why. Installing dependencies (`npm ci`, `dnf install`) and temporary files outside
+  the repo are fine.
 - The clone has no `node_modules` or other ignored files. If Acceptance needs them, make
   installing them (e.g. `npm ci`) the first step.
 - Browser checks: the VM has `chromium-browser` (headless) and 2 GB of RAM. Ask for one
@@ -143,7 +144,8 @@ directory), not in the repo:
 
 ## 5. Report
 
-Report: exit status, files changed (from git, not the report), each Acceptance check with
+Report: exit status, files changed (from git, not the report) — naming separately any file that
+was not in **Files to touch**, with the reason it changed — each Acceptance check with
 pass/fail, any Acceptance commands left unchecked before the run, your code review findings
 (or that you found none), anything the executor said it could not do, and the exact next
 step. Where the executor's report and your verification disagree, say so plainly.
