@@ -4,7 +4,8 @@
 # Fails (exit 1) when:
 #   - a "## Files to touch" entry does not exist as a tracked file, unless it ends in "(new)";
 #   - an entry marked "(new)" already exists.
-# An entry with a placeholder such as <slug> is skipped (the executor picks the name).
+# An entry with a placeholder such as <slug> is skipped (the executor picks the name). A plan with
+# no Files to touch list (a plain prompt, e.g. a song brief) passes: there is nothing to check.
 # Warns, without failing, about repo paths named in backticks elsewhere in the plan that are not
 # tracked files: steps often shorten or relativise a path, so that scan is only a hint.
 # Files to touch entries are list lines whose first backticked text is the path:
@@ -17,7 +18,7 @@ git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "check-plan: not in a gi
 
 fail=0
 entries=$(awk '/^## Files to touch/{f=1;next} /^## /{f=0} f' "$PLAN" | grep -E '^\s*- ')
-[ -n "$entries" ] || { echo "check-plan: '## Files to touch' has no list entries"; exit 1; }
+[ -n "$entries" ] || { echo "check-plan: no Files to touch list; nothing to check"; exit 0; }
 
 declare -A NEW=() LISTED=()
 while IFS= read -r line; do
