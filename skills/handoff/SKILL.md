@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Write an execution spec to .handoff/plan.md, run it with dsh (DeepSeek Harness) with full access inside a throwaway microVM on a clone of the repo, verify and review the result, report, and apply the changes to the repo when the user approves. Use when the user says "hand off" or "hand it off to dsh", "send it to the executor", "run it in dsh", "use dsh", "use deepseek", "have deepseek/dsh do it", "run it in a vm", "dsh-vm", or otherwise asks to stop planning and let DeepSeek implement the work. (handoff-local runs dsh on the host without a VM.)
-allowed-tools: Read, Glob, Grep, Write, Bash(dsh-vm:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git -C:*), Bash(git ls-files:*), Bash(git log:*), Bash(ls:*), Bash(bash ~/.claude/skills/handoff/check-plan.sh), Bash(bash ~/.claude/skills/handoff/check-scope.sh:*)
+allowed-tools: Read, Glob, Grep, Write, Bash(dsh-vm:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git -C:*)
 ---
 
 Do not implement anything yourself. You plan, the executor implements, you verify.
@@ -46,24 +46,10 @@ than it saves. These rules keep the prefix byte-identical:
 - Work from that top-level directory for every step below.
 - Run `git status --porcelain -- . ":(exclude).handoff"`. If anything is listed, stop and ask
   the user to commit or stash first, so the executor's diff is exactly its own work.
-- Make sure `.handoff/.gitignore` exists and lists `report.md`, `last-run.log` and
-  `review.md`, one per line (create it, or add the missing lines).
+- If `.handoff/.gitignore` does not exist, write it with these two lines:
+  `report.md` and `last-run.log`.
 - Run `dsh-vm list`. If an earlier run of this repo is listed, ask the user whether to apply
   or clean it before starting a new one; don't leave old runs piling up.
-
-## 1b. Read the repo before writing anything (required)
-
-A plan written from memory names files and functions that may not exist. Before writing the
-spec, ground every name in it in the real repo:
-
-- Run `ls` on each folder the work touches, and `git ls-files <folder>` to see what is tracked.
-- **Read every file you will list in Files to touch**, in full or at least every part a step
-  changes, with the Read tool. A file you have not read does not go in the plan.
-- For every function, flag, variable, command or line a step names, find it first (Grep or
-  Read) and use the name exactly as the code has it. If it does not exist, the step must say it
-  is created, and where.
-- Read the project's instruction files (AGENTS.md, CLAUDE.md, CONTRIBUTING, README) and any doc
-  the change makes false, so the plan includes the doc update.
 
 ## 2. Write the spec
 
@@ -78,9 +64,6 @@ Write `.handoff/plan.md` with exactly these sections:
     ## Out of scope
     ## If blocked
 
-- **Files to touch** is a list with one file per line, its path in backticks first:
-  `` - `path/to/file.ts` ``. A file the plan creates ends in `(new)`:
-  `` - `path/to/new-file.ts` (new) ``. No globs, no folders, no "and similar files".
 - Decisions only — no reasoning, no alternatives, no hedges. Assume the executor has none
   of this conversation: name exact file paths, function names, commands, and versions.
 - **Acceptance** is a list of runnable commands, each with its expected result
@@ -104,15 +87,6 @@ Write `.handoff/plan.md` with exactly these sections:
   and scripts (`npx playwright install chromium` is fine; browser downloads are cached between
   runs). For a quick one-off check in a project without one, point it at the system Chromium:
   `executablePath: '/usr/lib64/chromium-browser/chromium-browser'`.
-
-Optionally, run the plan check from the top-level directory. It is a check on your own plan, not
-a gate: nothing requires it, and `dsh-vm run` does not run it.
-
-    bash ~/.claude/skills/handoff/check-plan.sh
-
-It flags a Files to touch entry that is not a tracked file (and not marked `(new)`), and a `(new)`
-file that already exists; if it flags one, fix the plan. It warns about other paths in backticks
-that are not tracked files. A plan with no Files to touch list passes.
 
 Then check the **Acceptance** commands, before the executor spends anything on them. The
 code does not exist yet, so this tests the command, not the result:
@@ -155,31 +129,22 @@ When the run finishes, take the run dir from the first line of the command's out
 check below runs in the run dir (`git -C <run dir> ...`, or commands with that working
 directory), not in the repo:
 
-- First run the scope check: `bash ~/.claude/skills/handoff/check-scope.sh <run dir>`. If it
-  fails, the run changed files its plan did not allow: report each one, and do not apply until
-  the user decides, file by file, to keep or drop it.
 - Read `<run dir>/.handoff/report.md`. If it is missing, read the end of
-  `<run dir>/.handoff/last-run.log`. Treat the report as a claim to check, not as a result:
-  every command it says passed, run again yourself.
+  `<run dir>/.handoff/last-run.log`.
 - If the output says `timed out after N minutes`, the VM was stopped mid-run: say so first in
   the report, and treat the run dir as partial work.
 - Run `git status --porcelain` and `git diff --stat` to see what actually changed.
 - Run each **Acceptance** command from the plan and compare against its expected result.
-- Review the code, every file: run `git -C <run dir> diff -- <file>` for each changed file
-  and Read each new file in full. For each one, check it against `.handoff/plan.md` for bugs,
-  missing or half-done steps, and anything **Out of scope**, and read enough of the surrounding
-  code to judge it (callers of a changed function, the tests that cover it). Passing Acceptance
-  does not end the review.
-- Write the review down in `<run dir>/.handoff/review.md`: one entry per changed file with its
-  path, what changed in a sentence, and your finding (a bug with its line, a concern, or "no
-  issues"). Every file from the scope check must have an entry. Show it to the user in the
-  report.
+- Review the code: read the full `git diff` and every new untracked file (`git diff` does
+  not show those). Check it against `.handoff/plan.md` for bugs, missing or half-done steps,
+  changes outside **Files to touch**, and anything **Out of scope**. Passing Acceptance does
+  not end the review.
 - Do not edit any file during verification.
 
 ## 5. Report
 
-Report: exit status, the scope check result, files changed (from git, not the report), each
-Acceptance check with pass/fail, the per-file review from `review.md`, any Acceptance commands left unchecked before the run, your code review findings
+Report: exit status, files changed (from git, not the report), each Acceptance check with
+pass/fail, any Acceptance commands left unchecked before the run, your code review findings
 (or that you found none), anything the executor said it could not do, and the exact next
 step. Where the executor's report and your verification disagree, say so plainly.
 
@@ -189,8 +154,6 @@ Do not re-plan, patch, or fix failures yourself unless the user asks.
 
 ## 6. Apply or clean (only when the user says so)
 
-- Apply only when the scope check passed (or the user has decided on every file outside the
-  plan) and `review.md` has an entry for every changed file.
 - Apply: from the repo's top-level directory run `dsh-vm apply <run dir>`. It replays the
   run's changes as uncommitted changes (new files untracked) and copies `report.md` and
   `last-run.log` into `.handoff/`. Then run `dsh-vm clean <run dir>`.
