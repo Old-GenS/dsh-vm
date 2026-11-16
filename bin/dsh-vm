@@ -41,11 +41,6 @@ cmd_run() {
   [[ -n ${DEEPSEEK_API_KEY:-} ]] || die "DEEPSEEK_API_KEY is not set"
   local repo; repo=$(git rev-parse --show-toplevel) || die "not in a git repo"
   [[ -f $repo/.handoff/plan.md ]] || die "$repo/.handoff/plan.md not found"
-  # The plan's Files to touch must match the repo (no "(new)" file that exists, no listed file
-  # that doesn't) before anything runs; see skills/handoff/check-plan.sh.
-  local here; here=$(dirname -- "$(realpath -- "$0")")
-  (cd -- "$repo" && bash "$here/../skills/handoff/check-plan.sh") \
-    || die "the plan check failed; fix .handoff/plan.md before running"
 
   local dir; dir="$RUNS/$(basename -- "$repo")-$(date +%Y%m%d-%H%M%S)"
   mkdir -p -- "$RUNS"

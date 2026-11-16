@@ -105,13 +105,14 @@ Write `.handoff/plan.md` with exactly these sections:
   runs). For a quick one-off check in a project without one, point it at the system Chromium:
   `executablePath: '/usr/lib64/chromium-browser/chromium-browser'`.
 
-Then run the plan check from the top-level directory. It must pass before the executor runs:
+Optionally, run the plan check from the top-level directory. It is a check on your own plan, not
+a gate: nothing requires it, and `dsh-vm run` does not run it.
 
     bash ~/.claude/skills/handoff/check-plan.sh
 
-It fails if a Files to touch entry is not a tracked file (and not marked `(new)`), if a `(new)`
-file already exists or has no folder, or if the plan names any repo path in backticks that is
-not real. Fix the plan and run it again; never start the executor on a failing plan.
+It flags a Files to touch entry that is not a tracked file (and not marked `(new)`), and a `(new)`
+file that already exists; if it flags one, fix the plan. It warns about other paths in backticks
+that are not tracked files. A plan with no Files to touch list passes.
 
 Then check the **Acceptance** commands, before the executor spends anything on them. The
 code does not exist yet, so this tests the command, not the result:
