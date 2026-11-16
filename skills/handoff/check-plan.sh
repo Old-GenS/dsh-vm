@@ -5,7 +5,7 @@
 #   - a "## Files to touch" entry does not exist as a tracked file, unless it ends in "(new)";
 #   - an entry marked "(new)" already exists.
 # An entry with a placeholder such as <slug> is skipped (the executor picks the name). A plan with
-# no Files to touch list (a plain prompt, e.g. a song brief) passes: there is nothing to check.
+# no Files to touch list passes: there is nothing to check.
 # Warns, without failing, about repo paths named in backticks elsewhere in the plan that are not
 # tracked files: steps often shorten or relativise a path, so that scan is only a hint.
 # Files to touch entries are list lines whose first backticked text is the path:
