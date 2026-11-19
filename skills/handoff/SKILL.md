@@ -111,8 +111,10 @@ code does not exist yet, so this tests the command, not the result:
 ## 3. Run the executor
 
 From the top-level directory, run the EXECUTOR with the Bash tool,
-`run_in_background: true` and `timeout: 6000000` (100 minutes: dsh-vm stops the VM itself at 90,
-and the Bash tool's default background limit of 30 minutes would kill a long run early). dsh-vm clones the repo (with `.handoff/`) into a new run dir,
+`run_in_background: true` and `timeout: 7200000` (120 minutes, the Bash tool's maximum; its default
+background limit of 30 minutes would kill a long run early). dsh-vm stops the VM itself after
+`DSH_VM_TIMEOUT_MIN` (110 by default); keep that at 110 or less so dsh-vm, not the Bash tool, ends
+a run that runs out of time. dsh-vm clones the repo (with `.handoff/`) into a new run dir,
 prints its path first, and writes dsh's output to `<run dir>/.handoff/last-run.log`:
 
     dsh-vm run "Implement .handoff/plan.md exactly as written. Before you finish, write .handoff/report.md listing files changed, commands run and their results, anything you could not do, and the exact next step. If a step is wrong or impossible, stop and report instead of improvising. Do not commit, push, or switch branches. If the plan's Parallel work section lists workstreams, delegate each one to a teammate or subagent with your agent-team or subagent tools, give each only its own files, wait for all of them, then run the integration step yourself; say in the report which workstreams were delegated."
@@ -127,7 +129,7 @@ run):
 
 Do not poll after that; you will be notified when it exits. You don't need to watch for a stuck
 run: dsh-vm stops the VM itself when no file in the run dir changes for 15 minutes
-(`DSH_VM_STALL_MIN`; 0 turns it off), as well as at the 90-minute limit.
+(`DSH_VM_STALL_MIN`; 0 turns it off), as well as at the 110-minute limit.
 
 ## 4. Verify and review (read-only)
 

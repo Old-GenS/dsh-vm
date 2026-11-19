@@ -16,7 +16,7 @@ IMAGE=${DSH_VM_IMAGE:-localhost/dsh-vm:latest}
 RUNTIME=${DSH_VM_RUNTIME:-krun}          # set to runc/crun to run as a plain container
 MEMORY=${DSH_VM_MEMORY:-2g}
 CPUS=${DSH_VM_CPUS:-2}
-TIMEOUT_MIN=${DSH_VM_TIMEOUT_MIN:-90}    # the VM is killed after this many minutes
+TIMEOUT_MIN=${DSH_VM_TIMEOUT_MIN:-110}   # the VM is killed after this many minutes (keep <= 110: the Bash tool stops at 120)
 STALL_MIN=${DSH_VM_STALL_MIN:-15}        # ...or after this many minutes with no file changed (0: off)
 RUNS=${DSH_VM_RUNS:-${XDG_CACHE_HOME:-$HOME/.cache}/dsh-vm/runs}
 # npm's download cache, kept between runs so `npm ci` doesn't fetch everything again. npm checks
