@@ -80,7 +80,10 @@ Write `.handoff/plan.md` with exactly these sections:
   file outside **Files to touch** when it has to — the clone lives in a throwaway VM and is
   discarded — but every such file must appear in the report under "outside the plan", one line
   each saying why. Installing dependencies (`npm ci`, `dnf install`) and temporary files outside
-  the repo are fine.
+  the repo are fine. It also always includes: the only checks to run are the **Acceptance**
+  commands; don't write or run extra end-to-end tests, and don't run a script against a server
+  or service the plan doesn't set up for it. If something outside Acceptance fails, note it in
+  the report and finish.
 - The clone has no `node_modules` or other ignored files. If Acceptance needs them, make
   installing them (e.g. `npm ci`) the first step.
 - Browser checks: the VM has `chromium-browser` (headless) and 2 GB of RAM. Ask for one
@@ -122,7 +125,9 @@ run):
     dsh-vm log
     tail -f <run dir>/.handoff/last-run.log
 
-Do not poll after that; you will be notified when it exits.
+Do not poll after that; you will be notified when it exits. You don't need to watch for a stuck
+run: dsh-vm stops the VM itself when no file in the run dir changes for 15 minutes
+(`DSH_VM_STALL_MIN`; 0 turns it off), as well as at the 90-minute limit.
 
 ## 4. Verify and review (read-only)
 
@@ -130,10 +135,15 @@ When the run finishes, take the run dir from the first line of the command's out
 check below runs in the run dir (`git -C <run dir> ...`, or commands with that working
 directory), not in the repo:
 
-- Read `<run dir>/.handoff/report.md`. If it is missing, read the end of
-  `<run dir>/.handoff/last-run.log`.
-- If the output says `timed out after N minutes`, the VM was stopped mid-run: say so first in
-  the report, and treat the run dir as partial work.
+- Read `<run dir>/.handoff/report.md`. If it is missing, don't read `last-run.log` itself: it is
+  mostly the executor model's reasoning, and pulling another model's reasoning into this
+  conversation can trip Anthropic's safety filter and end the session for good. Read only its
+  status lines: `grep -E '^(dsh-vm|\[)' <run dir>/.handoff/last-run.log | tail -20`. Tell the user
+  `dsh-vm log` shows the full log if they want to read it themselves.
+- If the output says `timed out after N minutes` or `stalled: no file changed`, the VM was stopped
+  mid-run: say so first in the report, and treat the run dir as possibly partial work. A stalled
+  run has often finished the work and then looped, so run the Acceptance commands before
+  deciding.
 - Run `git status --porcelain` and `git diff --stat` to see what actually changed.
 - Run each **Acceptance** command from the plan and compare against its expected result.
 - Review the code: read the full `git diff` and every new untracked file (`git diff` does

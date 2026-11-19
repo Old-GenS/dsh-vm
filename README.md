@@ -110,6 +110,7 @@ dsh-vm build                              # rebuild the image (new dsh, edited p
 | `DSH_VM_MEMORY` | `2g` | VM memory cap (unused memory goes back to the host) |
 | `DSH_VM_CPUS` | `2` | CPU-time quota (the guest still sees every core) |
 | `DSH_VM_TIMEOUT_MIN` | `90` | The VM is stopped after this many minutes; the log says it timed out |
+| `DSH_VM_STALL_MIN` | `15` | The VM is stopped when no file in the run dir changes for this many minutes (the agent is looping); the log says it stalled. `0` turns it off |
 | `DSH_VM_RUNTIME` | `krun` | `crun` runs it as a plain container, for debugging |
 | `DSH_VM_IMAGE` | `localhost/dsh-vm:latest` | |
 | `DSH_VM_RUNS` | `~/.cache/dsh-vm/runs` | Where run dirs go; `apply`/`clean` refuse anything else |
