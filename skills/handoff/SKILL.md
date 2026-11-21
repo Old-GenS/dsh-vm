@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: Write an execution spec to .handoff/plan.md, run it with dsh (DeepSeek Harness) with full access inside a throwaway microVM on a clone of the repo, verify and review the result, report, and apply the changes to the repo when the user approves. Use when the user says "hand off" or "hand it off to dsh", "send it to the executor", "run it in dsh", "use dsh", "use deepseek", "have deepseek/dsh do it", "run it in a vm", "dsh-vm", or otherwise asks to stop planning and let DeepSeek implement the work. (handoff-local runs dsh on the host without a VM.)
-allowed-tools: Read, Glob, Grep, Write, Bash(dsh-vm:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git -C:*)
+allowed-tools: Read, Glob, Grep, Write, Bash(dsh-vm:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*)
 ---
 
 Do not implement anything yourself. You plan, the executor implements, you verify.
@@ -133,11 +133,17 @@ run: dsh-vm stops the VM itself when no file in the run dir changes for 15 minut
 
 ## 4. Verify and review (read-only)
 
-When the run finishes, take the run dir from the first line of the command's output. Every
-check below runs in the run dir (`git -C <run dir> ...`, or commands with that working
-directory), not in the repo:
+When the run finishes, take the run dir from the first line of the command's output.
 
-- Read `<run dir>/.handoff/report.md`. If it is missing, don't read `last-run.log` itself: it is
+**The run dir is the agent's: never run git or any of its code on the host there.** The agent
+controls its `.git` (hooks, `core.fsmonitor`, filter and diff drivers run by host git) and its
+scripts (`npm test` runs whatever its `package.json` says). Look at its changes with
+`dsh-vm diff`, which makes the patch inside a throwaway VM, and run commands with `dsh-vm exec`,
+which runs them in a VM without the API key. Reading files with Read, Grep or `cat` is fine, but
+only regular files: check with `test -f <file> && ! test -L <file>` first, since a planted symlink
+could point at any file on this machine.
+
+- Read `<run dir>/.handoff/report.md` (after the regular-file check). If it is missing, don't read `last-run.log` itself: it is
   mostly the executor model's reasoning, and pulling another model's reasoning into this
   conversation can trip Anthropic's safety filter and end the session for good. Read only its
   status lines: `grep -E '^(dsh-vm|\[)' <run dir>/.handoff/last-run.log | tail -20`. Tell the user
@@ -146,10 +152,10 @@ directory), not in the repo:
   mid-run: say so first in the report, and treat the run dir as possibly partial work. A stalled
   run has often finished the work and then looped, so run the Acceptance commands before
   deciding.
-- Run `git status --porcelain` and `git diff --stat` to see what actually changed.
-- Run each **Acceptance** command from the plan and compare against its expected result.
-- Review the code: read the full `git diff` and every new untracked file (`git diff` does
-  not show those). Check it against `.handoff/plan.md` for bugs, missing or half-done steps,
+- Run `dsh-vm diff <run dir> --stat` to see what actually changed (new files included).
+- Run each **Acceptance** command as `dsh-vm exec <run dir> -- <command>` (for a shell line:
+  `dsh-vm exec <run dir> -- sh -c '<command>'`) and compare against its expected result.
+- Review the code: read the full `dsh-vm diff <run dir>` (it includes new files). Check it against `.handoff/plan.md` for bugs, missing or half-done steps,
   changes outside **Files to touch**, and anything **Out of scope**. Passing Acceptance does
   not end the review.
 - Do not edit any file during verification.

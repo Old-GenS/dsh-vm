@@ -28,11 +28,20 @@ Claude Code (host) ── reviews the diff in the run dir, runs Acceptance there
 |---|---|
 | A clone of the repo (with `.handoff/`) | Your real checkout and its `.git` |
 | `DEEPSEEK_API_KEY` | SSH keys, `gh` token, any git remote: **it cannot push** |
-| The network (DeepSeek API, npm, web) | Your home directory and the rest of the host |
-| The npm cache and `~/.cache` (podman volumes) | The host kernel (libkrun gives the VM its own) |
+| The internet (DeepSeek API, npm, web) | Your home directory and the rest of the host |
+| This repo's own npm cache and `~/.cache` (podman volumes, one pair per repo) | The host kernel (libkrun gives the VM its own) |
+| | Services on this computer: no gateway or host-address mapping (other LAN machines are still reachable) |
 
 The clone uses `--no-hardlinks`, so the VM can't modify your repo's object files through shared
 inodes. The key is the one secret inside; use a spend-capped key.
+
+**The run dir is the agent's, so the host never runs git or the agent's code in it.** The agent
+controls the clone's `.git` (hooks, `core.fsmonitor`, filter and diff drivers that host git would
+run) and its scripts. `dsh-vm diff` and `dsh-vm apply` make the patch with git inside a throwaway
+VM with no network, and the host only `git apply`s it to your repo, from the commit it recorded
+at clone time. `dsh-vm exec` runs a check (say, the plan's tests) in a VM without the API key.
+`apply` copies `report.md` and `last-run.log` only when they are regular files, not symlinks the
+agent planted. The host writes the log through a descriptor opened before the VM starts.
 
 dsh runs as **root** inside the VM, so it can `dnf install` whatever a task needs. Under rootless
 Podman that root is your own unprivileged user on the host, and files it writes come back owned
@@ -100,6 +109,8 @@ cd your-repo                         # clean tree, .handoff/plan.md written
 dsh-vm run "Implement .handoff/plan.md exactly as written."   # prints the run dir first
 dsh-vm list
 dsh-vm log                                # follow the newest run's log live (Ctrl+C stops watching)
+dsh-vm diff ~/.cache/dsh-vm/runs/<run> --stat   # what changed (the patch is made in a VM)
+dsh-vm exec ~/.cache/dsh-vm/runs/<run> -- npm test   # run a check in a VM, without the key
 dsh-vm apply ~/.cache/dsh-vm/runs/<run>   # replay changes into the repo (uncommitted)
 dsh-vm clean ~/.cache/dsh-vm/runs/<run>   # or: dsh-vm clean --all
 dsh-vm build                              # rebuild the image (new dsh, edited profile)
@@ -111,11 +122,14 @@ dsh-vm build                              # rebuild the image (new dsh, edited p
 | `DSH_VM_CPUS` | `2` | CPU-time quota (the guest still sees every core) |
 | `DSH_VM_TIMEOUT_MIN` | `110` | The VM is stopped after this many minutes; the log says it timed out. Keep it at 110 or less when Claude Code runs dsh-vm (its Bash limit is 120) |
 | `DSH_VM_STALL_MIN` | `15` | The VM is stopped when no file in the run dir changes for this many minutes (the agent is looping); the log says it stalled. `0` turns it off |
+| `DSH_VM_DISK_MAX_GB` | `20` | The VM is stopped when the run dir uses more than this many GB; `0` turns it off |
+| `DSH_VM_MIN_FREE_GB` | `2` | ...or when its disk has less than this many GB free; `0` turns it off |
+| `DSH_VM_NETWORK` | `pasta:--no-map-gw,--map-guest-addr,none` | podman `--network`: the internet without routes to this computer |
 | `DSH_VM_RUNTIME` | `krun` | `crun` runs it as a plain container, for debugging |
 | `DSH_VM_IMAGE` | `localhost/dsh-vm:latest` | |
 | `DSH_VM_RUNS` | `~/.cache/dsh-vm/runs` | Where run dirs go; `apply`/`clean` refuse anything else |
-| `DSH_VM_NPM_CACHE` | `dsh-vm-npm` | Podman volume for npm's download cache (`podman volume rm dsh-vm-npm` to reset) |
-| `DSH_VM_CACHE` | `dsh-vm-cache` | Podman volume for `~/.cache`: Playwright/Puppeteer browsers, corepack's pnpm/yarn (`podman volume rm dsh-vm-cache` to reset) |
+| `DSH_VM_NPM_CACHE` | `dsh-vm-npm` | Prefix of the per-repo podman volume for npm's download cache (`<prefix>-<repo hash>`) |
+| `DSH_VM_CACHE` | `dsh-vm-cache` | Prefix of the per-repo podman volume for `~/.cache`: Playwright/Puppeteer browsers, corepack's pnpm/yarn |
 
 ## Updating
 
@@ -129,8 +143,10 @@ dsh-vm build                              # rebuild the image (new dsh, edited p
 | The dsh profile (model, reasoning, bundles) | Edit `image/cordis.patch.yml` or `image/package.json`, then `bin/dsh-vm build` |
 | libkrun / crun-krun | Host packages: `sudo dnf upgrade` |
 
-`dsh-vm build` removes the dangling image layers it leaves behind. To reset the npm cache:
-`podman volume rm dsh-vm-npm`; Playwright browsers and other caches: `podman volume rm dsh-vm-cache`.
+`dsh-vm build` removes the dangling image layers it leaves behind. Each repo has its own cache
+volumes, so a run on one repo can't plant anything a run on another uses. List them with
+`podman volume ls --filter name=dsh-vm-` and remove one with `podman volume rm <name>`; volumes
+from before this change (`dsh-vm-npm`, `dsh-vm-cache`) are no longer used and can be removed.
 
 ## Resources
 
