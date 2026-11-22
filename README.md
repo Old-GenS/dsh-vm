@@ -96,8 +96,8 @@ sed -i 's/^name: handoff$/name: handoff-local/' ~/.claude/skills/handoff-local/S
 
 and change its `description:` so it only triggers on "handoff-local" / "without a VM".
 
-The image bakes in the dsh profile from `image/` (bundles: base, headless, agent teams;
-model `deepseek-flash`, reasoning low). Edit `image/cordis.patch.yml`, or bump `DSH_VERSION`
+The image bakes in the dsh profile from `image/` (bundles: base and headless; agent teams are
+part of base; model `deepseek-flash`, reasoning low). Edit `image/cordis.patch.yml`, or bump `DSH_VERSION`
 with `bin/dsh-vm build --build-arg DSH_VERSION=<version>`, then rebuild.
 
 ## Use
