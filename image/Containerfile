@@ -30,5 +30,7 @@ RUN npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" corepack && corepack enable
 
 ENV DSH_HOME=/opt/dsh HOME=/root
 COPY package.json pnpm-workspace.yaml cordis.yml cordis.patch.yml /opt/dsh/profiles/headless/
+# The egress proxy the VM's only network path points at (see bin/dsh-vm).
+COPY proxy/ /opt/egress/
 
 WORKDIR /work
