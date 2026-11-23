@@ -6,8 +6,7 @@
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
-        "@deepseek-ai/dsh-headless",
-        "@deepseek-ai/dsh-experimental-agent-team-profile"
+        "@deepseek-ai/dsh-headless"
       ]
     }
   }
