@@ -28,9 +28,18 @@ Claude Code (host) ── reviews the diff in the run dir, runs Acceptance there
 |---|---|
 | A clone of the repo (with `.handoff/`) | Your real checkout and its `.git` |
 | `DEEPSEEK_API_KEY` | SSH keys, `gh` token, any git remote: **it cannot push** |
-| The internet (DeepSeek API, npm, web) | Your home directory and the rest of the host |
+| HTTP and HTTPS, through the egress proxy (DeepSeek API, npm, web) | Any other kind of network traffic: no DNS, no raw TCP, no UDP, no SSH |
 | This repo's own npm cache and `~/.cache` (podman volumes, one pair per repo) | The host kernel (libkrun gives the VM its own) |
-| | Services on this computer: no gateway or host-address mapping (other LAN machines are still reachable) |
+| | This computer and every other non-public address: the proxy refuses them |
+
+Each VM sits alone on its own podman `--internal` network, which has no route out and no DNS.
+Its one neighbour is a proxy container (not a VM) that is also on podman's normal network. The
+proxy resolves every name itself, refuses any address that is not public space, and connects to
+the address it vetted — so a DNS answer that changes after the check cannot get around it. That
+means HTTP and HTTPS to public addresses only: raw TCP, UDP, DNS, SSH and the LAN have no path,
+even for a program that ignores `HTTPS_PROXY`. Each run gets its own network and proxy, so runs
+can overlap, and both are removed when dsh-vm exits (after a `kill -9`:
+`podman network ls --filter name=dsh-vm-`). `DSH_VM_EGRESS=direct` restores the old open pasta network.
 
 The clone uses `--no-hardlinks`, so the VM can't modify your repo's object files through shared
 inodes. The key is the one secret inside; use a spend-capped key.
@@ -124,7 +133,9 @@ dsh-vm build                              # rebuild the image (new dsh, edited p
 | `DSH_VM_STALL_MIN` | `15` | The VM is stopped when no file in the run dir changes for this many minutes (the agent is looping); the log says it stalled. `0` turns it off |
 | `DSH_VM_DISK_MAX_GB` | `20` | The VM is stopped when the run dir uses more than this many GB; `0` turns it off |
 | `DSH_VM_MIN_FREE_GB` | `2` | ...or when its disk has less than this many GB free; `0` turns it off |
-| `DSH_VM_NETWORK` | `pasta:--no-map-gw,--map-guest-addr,none` | podman `--network`: the internet without routes to this computer |
+| `DSH_VM_EGRESS` | `proxy` | `proxy` puts the VM on its own internal network whose only way out is the proxy (HTTP/HTTPS, public addresses only); `direct` restores the open pasta network |
+| `DSH_VM_EGRESS_DEBUG` | `0` | `1` logs every refused destination to the proxy's stderr |
+| `DSH_VM_NETWORK` | *(from `DSH_VM_EGRESS`)* | Advanced: a podman `--network` value to use instead; no proxy is started |
 | `DSH_VM_RUNTIME` | `krun` | `crun` runs it as a plain container, for debugging |
 | `DSH_VM_IMAGE` | `localhost/dsh-vm:latest` | |
 | `DSH_VM_RUNS` | `~/.cache/dsh-vm/runs` | Where run dirs go; `apply`/`clean` refuse anything else |
