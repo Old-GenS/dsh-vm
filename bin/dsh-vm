@@ -26,17 +26,15 @@ STALL_MIN=${DSH_VM_STALL_MIN:-15}        # ...or after this many minutes with no
 DISK_MAX_GB=${DSH_VM_DISK_MAX_GB:-20}     # stop when the run dir uses more than this many GB (0: off)
 MIN_FREE_GB=${DSH_VM_MIN_FREE_GB:-2}      # ...or its disk has less than this many GB free (0: off)
 # How the VM reaches the internet:
-#   proxy (default) — pasta forwards exactly one port, to a host-side HTTP/HTTPS proxy that
-#                     refuses anything that is not public space. No DNS, no raw TCP, no UDP.
+#   proxy (default) — the VM sits alone on its own podman --internal network, which has no route
+#                     out and no DNS. Its one neighbour is a proxy container that is also on the
+#                     normal network and refuses anything that is not public space. So: HTTP and
+#                     HTTPS to public addresses only; no DNS, no raw TCP, no UDP, no LAN.
 #   direct          — pasta gives the VM the open internet. It still cannot reach this computer
 #                     or its gateway, but it can reach the LAN and any public port.
 EGRESS=${DSH_VM_EGRESS:-proxy}
-EGRESS_PORT=${DSH_VM_EGRESS_PORT:-3128}
-if [[ $EGRESS == proxy ]]; then
-  NETWORK=${DSH_VM_NETWORK:-pasta:-q,-T,$EGRESS_PORT,-U,none,--no-map-gw}
-else
-  NETWORK=${DSH_VM_NETWORK:-pasta:--no-map-gw,--map-guest-addr,none}
-fi
+DIRECT_NETWORK=pasta:--no-map-gw,--map-guest-addr,none
+NETWORK=   # set by start_egress
 RUNS=${DSH_VM_RUNS:-${XDG_CACHE_HOME:-$HOME/.cache}/dsh-vm/runs}
 # npm's download cache and ~/.cache (Playwright/Puppeteer browsers, corepack's pnpm/yarn), kept
 # between runs as podman volumes so they download once. Each repo gets its own pair
@@ -47,44 +45,57 @@ HOME_CACHE=${DSH_VM_CACHE:-dsh-vm-cache}
 
 die() { echo "dsh-vm: $*" >&2; exit 1; }
 
-# The egress proxy is a throwaway container from the same image, published on the host's
-# loopback. pasta's -T forwards exactly that port out of the VM, so the proxy is its only way
-# out; inside the VM it is reached at 127.0.0.1:<port> (pasta shares the host's loopback).
+# Each VM gets its own egress pair, both removed when dsh-vm exits:
+#   <owner>-net     a podman --internal network: no gateway route, no DNS
+#   <owner>-egress  a plain container (not a VM) from the same image running /opt/egress, on both
+#                   <owner>-net and podman's normal network
+# The VM joins <owner>-net only, so the proxy is the one address it can reach. Under krun the VM's
+# sockets are opened in its container's network namespace, so the guest is held to the same rule.
+# Leftovers after a kill -9: podman ps -a / podman network ls --filter name=dsh-vm-
+EGRESS_PORT=3128
 EGRESS_NAME=
+EGRESS_NET=
 EGRESS_ENV=()
 
-port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
-
 start_egress() {
-  [[ $EGRESS == proxy ]] || return 0
-  local owner=$1 url i
-  port_open "$EGRESS_PORT" && die "port $EGRESS_PORT is already in use (set DSH_VM_EGRESS_PORT)"
-  EGRESS_NAME="$owner-egress"
-  podman run -d --rm --name "$EGRESS_NAME" \
-    --publish "127.0.0.1:$EGRESS_PORT:$EGRESS_PORT" \
+  if [[ -n ${DSH_VM_NETWORK:-} ]]; then NETWORK=$DSH_VM_NETWORK; return 0; fi
+  case $EGRESS in
+    direct) NETWORK=$DIRECT_NETWORK; return 0 ;;
+    proxy) ;;
+    *) die "DSH_VM_EGRESS must be proxy or direct, not: $EGRESS" ;;
+  esac
+  local owner=$1 ip i
+  EGRESS_NAME="$owner-egress" EGRESS_NET="$owner-net"
+  trap stop_egress EXIT
+  podman network create --internal --disable-dns "$EGRESS_NET" >/dev/null \
+    || die "couldn't create the VM's network"
+  podman run -d --rm --name "$EGRESS_NAME" --memory 256m --cpus 1 \
+    --network podman --network "$EGRESS_NET" \
     -e EGRESS_PORT="$EGRESS_PORT" -e EGRESS_DEBUG="${DSH_VM_EGRESS_DEBUG:-0}" \
-    "$IMAGE" node --experimental-strip-types /opt/egress/serve.ts >/dev/null \
+    "$IMAGE" node /opt/egress/serve.ts >/dev/null \
     || die "couldn't start the egress proxy"
   for i in {1..50}; do
-    port_open "$EGRESS_PORT" && break
-    podman ps --format '{{.Names}}' | grep -qx -- "$EGRESS_NAME" \
-      || die "the egress proxy exited; see: podman logs $EGRESS_NAME"
+    podman logs "$EGRESS_NAME" 2>/dev/null | grep -q '^egress: listening' && break
+    podman container exists "$EGRESS_NAME" || die "the egress proxy exited before it was ready"
     sleep 0.2
   done
-  port_open "$EGRESS_PORT" || die "the egress proxy did not start listening on port $EGRESS_PORT"
-  url="http://127.0.0.1:$EGRESS_PORT"
+  podman logs "$EGRESS_NAME" 2>/dev/null | grep -q '^egress: listening' \
+    || die "the egress proxy did not start; see: podman logs $EGRESS_NAME"
+  ip=$(podman inspect --format "{{(index .NetworkSettings.Networks \"$EGRESS_NET\").IPAddress}}" "$EGRESS_NAME")
+  [[ -n $ip ]] || die "couldn't find the egress proxy's address"
+  NETWORK=$EGRESS_NET
+  local url="http://$ip:$EGRESS_PORT"
   EGRESS_ENV=(
     -e "HTTP_PROXY=$url" -e "HTTPS_PROXY=$url" -e "http_proxy=$url" -e "https_proxy=$url"
     -e "NO_PROXY=localhost,127.0.0.1,::1" -e "no_proxy=localhost,127.0.0.1,::1"
     -e NODE_USE_ENV_PROXY=1
   )
-  trap stop_egress EXIT
 }
 
 stop_egress() {
-  [[ -n $EGRESS_NAME ]] || return 0
-  podman stop -t 2 "$EGRESS_NAME" >/dev/null 2>&1 || true
-  EGRESS_NAME=
+  if [[ -n $EGRESS_NAME ]]; then podman rm -f -t 2 "$EGRESS_NAME" >/dev/null 2>&1 || true; fi
+  if [[ -n $EGRESS_NET ]]; then podman network rm -f "$EGRESS_NET" >/dev/null 2>&1 || true; fi
+  EGRESS_NAME= EGRESS_NET=
 }
 
 # A run dir must sit directly inside $RUNS, so apply/clean never touch anything else.
